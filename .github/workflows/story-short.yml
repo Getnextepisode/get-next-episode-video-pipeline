@@ -1,0 +1,38 @@
+name: Generate and publish story short
+
+on:
+  workflow_dispatch:
+    inputs:
+      story_id:
+        description: Story ID to promote
+        required: true
+        type: string
+  schedule:
+    - cron: '30 18 * * *'
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install video tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Render short
+        env:
+          STORY_ID: ${{ inputs.story_id || '' }}
+          APP_URL: https://get-next-episode-bot.byd-karaoke-israel.workers.dev
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          curl -fsSL "$APP_URL/api/video-promo?story=${STORY_ID}" -o build/manifest.json
+          curl -fsSL "$(jq -r .cover build/manifest.json)" -o build/cover.png
+          curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
+          ffmpeg -y -loop 1 -i build/cover.png -i build/voice.mp3 -t 35 -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,format=yuv420p" -c:v libx264 -c:a aac -shortest build/story-short.mp4
+      - name: Upload to YouTube
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: echo 'YouTube OAuth upload step is enabled after channel credentials are configured.'
