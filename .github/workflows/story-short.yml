@@ -1,5 +1,5 @@
 name: Generate and publish story short
- 
+
 on:
   workflow_dispatch:
     inputs:
@@ -36,8 +36,9 @@ jobs:
           curl -fsSL -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/video-promo?story=${STORY_ID}" -o build/manifest.json
           curl -fsSL "$(jq -r .cover build/manifest.json)" -o build/cover.png
           curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
+          jq -r '.teaser' build/manifest.json > build/caption.txt
           ffmpeg -y -loop 1 -i build/cover.png -i build/voice.mp3 -t 35 \
-            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,format=yuv420p" \
+            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/caption.txt:fontcolor=white:fontsize=64:line_spacing=12:fix_bounds=true:x=(w-text_w)/2:y=h-430:box=1:boxcolor=black@0.72:boxborderw=28,format=yuv420p" \
             -c:v libx264 -c:a aac -shortest build/story-short.mp4
 
       - name: Upload to YouTube
