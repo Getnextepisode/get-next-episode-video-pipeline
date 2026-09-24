@@ -36,21 +36,10 @@ jobs:
           curl -fsSL -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/video-promo?story=${STORY_ID}" -o build/manifest.json
           curl -fsSL "$(jq -r .cover build/manifest.json)" -o build/cover.png
           curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
-          jq -r '.teaser' build/manifest.json > build/caption.txt
-          python3 - <<'PY'
-          import json,re
-          t=json.load(open('build/manifest.json',encoding='utf-8')).get('teaser','')
-          words=t.split(); dur=35.0/max(1,len(words))
-          def ts(x): return f'{int(x//3600):02d}:{int(x%3600//60):02d}:{x%60:06.3f}'.replace('.',',')
-          out=[]
-          for i,w in enumerate(words):
-              out += [str(i+1), f'{ts(i*dur)} --> {ts((i+1)*dur)}', w, '']
-          open('build/caption.srt','w',encoding='utf-8').write(chr(10).join(out))
-          PY
-          test -s build/caption.srt
-          CAPTION_PATH=$(realpath build/caption.srt)
+          jq -r '.title' build/manifest.json > build/title.txt
+          jq -r '.teaser' build/manifest.json > build/tagline.txt
           ffmpeg -y -loop 1 -i build/cover.png -i build/voice.mp3 -t 35 \
-            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,subtitles=${CAPTION_PATH}:force_style='FontName=DejaVu Sans,FontSize=28,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H99000000,BorderStyle=4,Alignment=5,MarginV=500',format=yuv420p" \
+            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.00035,1.10)':d=1050:s=1080x1920,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='GetNextEpisode':fontcolor=white:fontsize=42:borderw=2:bordercolor=black@0.8:x=(w-text_w)/2:y=110,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/title.txt:fontcolor=white:fontsize=78:line_spacing=10:borderw=3:bordercolor=black@0.85:x=(w-text_w)/2:y=650:box=1:boxcolor=black@0.55:boxborderw=24,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:textfile=build/tagline.txt:fontcolor=white:fontsize=42:line_spacing=10:borderw=2:bordercolor=black@0.85:x=(w-text_w)/2:y=1120:box=1:boxcolor=black@0.55:boxborderw=20,format=yuv420p" \
             -c:v libx264 -c:a aac -shortest build/story-short.mp4
 
       - name: Upload to YouTube
