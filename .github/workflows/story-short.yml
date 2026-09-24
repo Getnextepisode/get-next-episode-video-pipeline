@@ -41,21 +41,21 @@ jobs:
           python3 - <<'PY'
           import json, re
           m=json.load(open('build/manifest.json',encoding='utf-8'))
-          clean=lambda s: re.sub(r'[^A-Za-z0-9\\u0590-\\u05FF .,!?-]', '', str(s))
+          clean=lambda s: re.sub(r'[^A-Za-z0-9\u0590-\u05FF .,!?-]', '', str(s))
           open('build/title.txt','w',encoding='utf-8').write(clean(m.get('title','Get Next Episode')))
           open('build/tagline.txt','w',encoding='utf-8').write(clean(m.get('teaser','')))
           import textwrap
           teaser=clean(m.get('teaser',''))
-          open('build/tagline.txt','w',encoding='utf-8').write('\\n'.join(textwrap.wrap(teaser,32)[:3]))
+          open('build/tagline.txt','w',encoding='utf-8').write('\n'.join(textwrap.wrap(teaser,32)[:3]))
           genre=clean(m.get('genre',m.get('category','ORIGINAL STORY')))
           open('build/genre.txt','w',encoding='utf-8').write(genre.upper())
           rating=m.get('rating',4.8)
           readers=m.get('readers',m.get('views',''))
           open('build/details.txt','w',encoding='utf-8').write(clean(f"{rating} / 5   |   {readers} readers"))
           PY
-          ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -i build/logo.png \
+          ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -i build/logo.png -f lavfi -i sine=frequency=440:duration=2 \
             -filter_complex "[1:v]scale=360:-1[logo];[0:v][logo]overlay=(W-w)/2:650,format=yuv420p[v]" \
-            -map "[v]" -f lavfi -i sine=frequency=440:duration=2 -map 2:a -t 2 -c:v libx264 -c:a aac -ar 48000 -ac 2 build/intro.mp4
+            -map "[v]" -map 2:a -t 2 -c:v libx264 -c:a aac -ar 48000 -ac 2 build/intro.mp4
 
           ffmpeg -y -i build/cover.png -i build/logo.png \
             -filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawbox=x=0:y=0:w=1080:h=1920:color=black@0.28:t=fill[bg];[1:v]scale=230:-1[logo];[bg][logo]overlay=70:70,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='GET NEXT':fontcolor=white:fontsize=46:x=340:y=120,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='EPISODE':fontcolor=red:fontsize=46:x=620:y=120,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/genre.txt:fontcolor=#ff3347:fontsize=42:x=80:y=470,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/title.txt:fontcolor=white:fontsize=104:borderw=4:bordercolor=black@0.9:x=80:y=550,drawbox=x=70:y=760:w=940:h=430:color=#07101f@0.78:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:textfile=build/tagline.txt:fontcolor=white:fontsize=48:line_spacing=20:x=110:y=820,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/details.txt:fontcolor=#f5c451:fontsize=40:x=110:y=1090,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='LISTEN NOW':fontcolor=white:fontsize=42:x=80:y=1700,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='@GetNextEpisodeBot':fontcolor=#ff3347:fontsize=46:x=80:y=1770,format=rgba[v]" \
@@ -64,9 +64,9 @@ jobs:
           ffmpeg -y -loop 1 -i build/story-cover.png -i build/voice.mp3 -t 35 \
             -vf "format=yuv420p" -map 0:v -map 1:a -c:v libx264 -r 25 -c:a aac -ar 48000 -ac 2 -af "aresample=48000,loudnorm=I=-16:TP=-1.5:LRA=11" -shortest build/main.mp4
 
-          ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -i build/logo.png \
+          ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -i build/logo.png -f lavfi -i sine=frequency=330:duration=2 \
             -filter_complex "[1:v]scale=300:-1[logo];[0:v][logo]overlay=(W-w)/2:560,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='CONTINUE THE STORY':fontcolor=white:fontsize=52:x=(w-text_w)/2:y=1050,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='@GetNextEpisodeBot':fontcolor=red:fontsize=48:x=(w-text_w)/2:y=1140,format=yuv420p[v]" \
-            -map "[v]" -f lavfi -i sine=frequency=330:duration=2 -map 2:a -t 2 -c:v libx264 -c:a aac -ar 48000 -ac 2 build/outro.mp4
+            -map "[v]" -map 2:a -t 2 -c:v libx264 -c:a aac -ar 48000 -ac 2 build/outro.mp4
 
           printf "file '%s'\\nfile '%s'\\nfile '%s'\\n" "$PWD/build/intro.mp4" "$PWD/build/main.mp4" "$PWD/build/outro.mp4" > build/concat.txt
           ffmpeg -y -f concat -safe 0 -i build/concat.txt -c:v libx264 -c:a aac -ar 48000 -ac 2 -movflags +faststart build/story-short.mp4
