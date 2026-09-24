@@ -40,12 +40,12 @@ jobs:
           python3 - <<'PY'
           import json,re
           t=json.load(open('build/manifest.json',encoding='utf-8')).get('teaser','')
-          words=re.findall(r'\\S+',t); dur=35.0/max(1,len(words))
+          words=t.split(); dur=35.0/max(1,len(words))
           def ts(x): return f'{int(x//3600):02d}:{int(x%3600//60):02d}:{x%60:06.3f}'.replace('.',',')
           out=[]
           for i,w in enumerate(words):
               out += [str(i+1), f'{ts(i*dur)} --> {ts((i+1)*dur)}', w, '']
-          open('build/caption.srt','w',encoding='utf-8').write('\\n'.join(out))
+          open('build/caption.srt','w',encoding='utf-8').write(chr(10).join(out))
           PY
           test -s build/caption.srt
           CAPTION_PATH=$(realpath build/caption.srt)
