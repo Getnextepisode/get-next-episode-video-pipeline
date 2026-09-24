@@ -22,7 +22,7 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg python3-pip
+          sudo apt-get install -y ffmpeg imagemagick python3-pip
           python3 -m pip install --upgrade google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
 
       - name: Build vertical short
@@ -36,20 +36,23 @@ jobs:
           curl -fsSL -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/video-promo?story=${STORY_ID}" -o build/manifest.json
           curl -fsSL "$(jq -r .cover build/manifest.json)" -o build/cover.png
           curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
+          curl -fsSL https://raw.githubusercontent.com/Getnextepisode/get-next-episode-video-pipeline/main/assets/logo.svg -o build/logo.svg
+          convert -background none build/logo.svg build/logo.png
           python3 - <<'PY'
-          import json
+          import json, re
           m=json.load(open('build/manifest.json',encoding='utf-8'))
-          clean=lambda s: ''.join(ch for ch in str(s) if ord(ch)<0x1f000 or ('\u0590'<=ch<='\u05ff') or ch.isalnum() or ch.isspace() or ch in '.,!?-')
+          clean=lambda s: re.sub(r'[^A-Za-z0-9\\u0590-\\u05FF .,!?-]', '', str(s))
           open('build/title.txt','w',encoding='utf-8').write(clean(m.get('title','Get Next Episode')))
           open('build/tagline.txt','w',encoding='utf-8').write(clean(m.get('teaser','')))
+          open('build/details.txt','w',encoding='utf-8').write(clean(f"★ {m.get('rating',4.8)}  •  {m.get('readers',m.get('views',''))} readers"))
           PY
           ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -f lavfi -i sine=frequency=440:duration=2 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='GET NEXT':fontcolor=white:fontsize=70:x=(w-text_w)/2:y=780,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='EPISODE':fontcolor=red:fontsize=70:x=(w-text_w)/2:y=870,format=yuv420p" -c:v libx264 -c:a aac -shortest build/intro.mp4
           ffmpeg -y -loop 1 -i build/cover.png -i build/voice.mp3 -t 35 \
-            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.00035,1.10)':d=1050:s=1080x1920,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='GET NEXT':fontcolor=white:fontsize=48:borderw=2:bordercolor=black@0.8:x=300:y=105,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='EPISODE':fontcolor=red:fontsize=48:borderw=2:bordercolor=black@0.8:x=610:y=105,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/title.txt:fontcolor=white:fontsize=108:line_spacing=10:borderw=3:bordercolor=black@0.85:x=(w-text_w)/2:y=650:box=1:boxcolor=black@0.55:boxborderw=24,format=yuv420p" \
-            -c:v libx264 -c:a aac -shortest build/main.mp4
+            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.00035,1.10)':d=1050:s=1080x1920,movie=build/logo.png,scale=360:180[logo];[in][logo]overlay=360:80[tmp];[tmp],drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='EPISODE':fontcolor=red:fontsize=48:borderw=2:bordercolor=black@0.8:x=610:y=105,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/title.txt:fontcolor=white:fontsize=108:line_spacing=10:borderw=3:bordercolor=black@0.85:x=(w-text_w)/2:y=650:box=1:boxcolor=black@0.55:boxborderw=24,format=yuv420p" \
+            -c:v libx264 -c:a aac -ar 48000 -ac 2 -af loudnorm -shortest build/main.mp4
           ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -f lavfi -i sine=frequency=330:duration=2 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='READ THE NEXT EPISODE':fontcolor=white:fontsize=54:x=(w-text_w)/2:y=820,format=yuv420p" -c:v libx264 -c:a aac -shortest build/outro.mp4
           printf "file '%s'\\nfile '%s'\\nfile '%s'\\n" "$PWD/build/intro.mp4" "$PWD/build/main.mp4" "$PWD/build/outro.mp4" > build/concat.txt
-          ffmpeg -y -f concat -safe 0 -i build/concat.txt -c:v libx264 -c:a aac -movflags +faststart build/story-short.mp4
+          ffmpeg -y -f concat -safe 0 -i build/concat.txt -c:v libx264 -c:a aac -ar 48000 -ac 2 -movflags +faststart build/story-short.mp4
 
       - name: Upload to YouTube
         env:
