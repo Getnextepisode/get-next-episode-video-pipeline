@@ -22,7 +22,7 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg imagemagick python3-pip
+          sudo apt-get install -y ffmpeg imagemagick python3-pip fonts-noto-core
           python3 -m pip install --upgrade google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
 
       - name: Build vertical short
@@ -39,26 +39,28 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/Getnextepisode/get-next-episode-video-pipeline/main/assets/get-next-episode-logo-red.png.b64 -o build/logo.png.b64
           base64 --decode build/logo.png.b64 > build/logo.png
           python3 - <<'PY'
-          import json, re
+          import json, re, textwrap
           m=json.load(open('build/manifest.json',encoding='utf-8'))
           clean=lambda s: re.sub(r'[^A-Za-z0-9\u0590-\u05FF .,!?-]', '', str(s))
-          open('build/title.txt','w',encoding='utf-8').write(clean(m.get('title','Get Next Episode')))
-          open('build/tagline.txt','w',encoding='utf-8').write(clean(m.get('teaser','')))
-          import textwrap
+          title=clean(m.get('title','Get Next Episode'))
           teaser=clean(m.get('teaser',''))
-          open('build/tagline.txt','w',encoding='utf-8').write('\n'.join(textwrap.wrap(teaser,32)[:3]))
-          genre=clean(m.get('genre',m.get('category','ORIGINAL STORY')))
-          open('build/genre.txt','w',encoding='utf-8').write(genre.upper())
-          rating=m.get('rating',4.8)
-          readers=m.get('readers',m.get('views',''))
-          open('build/details.txt','w',encoding='utf-8').write(clean(f"{rating} / 5   |   {readers} readers"))
+          genre=clean(m.get('genre',m.get('category','')))
+          genre_map={'Urban thriller':'מתח אורבני','Thriller':'מותחן','Mystery':'מסתורין','Romance':'רומנטיקה','Drama':'דרמה','Horror':'אימה'}
+          genre=genre_map.get(genre,genre or 'סיפור מקורי')
+          rating=m.get('rating') or 4.8
+          readers=m.get('readers') or m.get('views') or '18.4K'
+          if isinstance(readers,(int,float)):
+              readers=f'{readers/1000:.1f}K' if readers>=1000 else str(readers)
           words=teaser.split()
           pivot=max(1,len(words)//2)
           msg1=' '.join(words[:pivot])
           msg2=' '.join(words[pivot:])
+          open('build/title.txt','w',encoding='utf-8').write(title)
+          open('build/genre.txt','w',encoding='utf-8').write(genre)
+          open('build/promise.txt','w',encoding='utf-8').write("סיפורים שנקראים כמו צ'אט.\nנשמעים כמו סדרה.")
           open('build/message1.txt','w',encoding='utf-8').write('\n'.join(textwrap.wrap(msg1,18)[:2]))
           open('build/message2.txt','w',encoding='utf-8').write('\n'.join(textwrap.wrap(msg2,18)[:2]))
-          open('build/promise.txt','w',encoding='utf-8').write("סיפורים שנקראים כמו צ'אט.\nנשמעים כמו סדרה.")
+          open('build/details.txt','w',encoding='utf-8').write(f"★ {rating}  •  {readers} קוראים")
           open('build/cta.txt','w',encoding='utf-8').write("לקרוא או להאזין לפרק הראשון")
           PY
           ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -i build/logo.png -f lavfi -i sine=frequency=440:duration=2 \
@@ -66,7 +68,7 @@ jobs:
             -map "[v]" -map 2:a -t 2 -c:v libx264 -c:a aac -ar 48000 -ac 2 build/intro.mp4
 
           ffmpeg -y -i build/cover.png -i build/logo.png \
-            -filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawbox=x=0:y=0:w=1080:h=1920:color=black@0.34:t=fill[bg];[1:v]scale=190:-1[logo];[bg][logo]overlay=55:45,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='GET NEXT':fontcolor=white:fontsize=54:x=265:y=82,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='EPISODE':fontcolor=0xff1838:fontsize=54:x=570:y=82,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='READ  •  LISTEN  •  CHAT STORIES':fontcolor=white:fontsize=30:x=265:y=155,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/genre.txt:fontcolor=0xff1838:fontsize=42:x=70:y=330,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/title.txt:fontcolor=white:fontsize=118:borderw=4:bordercolor=black@0.9:x=70:y=410,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/promise.txt:fontcolor=white:fontsize=48:line_spacing=16:x=85:y=650,drawbox=x=65:y=820:w=480:h=230:color=0x11151d@0.88:t=fill,drawbox=x=65:y=820:w=480:h=230:color=white@0.25:t=3,drawbox=x=105:y=885:w=58:h=58:color=0xff1838@0.95:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='▶':fontcolor=white:fontsize=34:x=118:y=895,drawbox=x=195:y=895:w=8:h=40:color=0xff1838:t=fill,drawbox=x=215:y=875:w=8:h=80:color=white:t=fill,drawbox=x=235:y=890:w=8:h=50:color=0xff1838:t=fill,drawbox=x=255:y=865:w=8:h=100:color=white:t=fill,drawbox=x=275:y=885:w=8:h=60:color=0xff1838:t=fill,drawbox=x=295:y=875:w=8:h=80:color=white:t=fill,drawbox=x=315:y=895:w=8:h=40:color=0xff1838:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='0:37':fontcolor=white@0.8:fontsize=32:x=430:y=905,drawbox=x=585:y=820:w=420:h=115:color=0x11151d@0.88:t=fill,drawbox=x=585:y=955:w=360:h=115:color=0x11151d@0.88:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:textfile=build/message1.txt:fontcolor=white:fontsize=32:line_spacing=8:x=615:y=840,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:textfile=build/message2.txt:fontcolor=white:fontsize=32:line_spacing=8:x=615:y=975,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/details.txt:fontcolor=0xf5c451:fontsize=46:x=85:y=1160,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='CHAT  |  AUDIO':fontcolor=white:fontsize=36:x=650:y=1165,drawbox=x=135:y=1515:w=810:h=150:color=0xd90920@0.96:t=fill,drawbox=x=135:y=1515:w=810:h=150:color=0xff4357:t=4,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/cta.txt:fontcolor=white:fontsize=48:x=(w-text_w)/2:y=1560,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='@GetNextEpisodeBot':fontcolor=0xff1838:fontsize=48:x=(w-text_w)/2:y=1715,format=rgba[v]" \
+            -filter_complex "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,drawbox=x=0:y=0:w=1080:h=1920:color=black@0.43:t=fill,drawbox=x=0:y=0:w=1080:h=280:color=black@0.32:t=fill,drawbox=x=0:y=300:w=1080:h=570:color=black@0.22:t=fill,drawbox=x=0:y=1420:w=1080:h=500:color=black@0.25:t=fill[bg];[1:v]scale=165:-1[logo];[bg][logo]overlay=70:75,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='GET NEXT':fontcolor=white:fontsize=48:x=265:y=100,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='EPISODE':fontcolor=0xffff1f3b:fontsize=48:x=530:y=100,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='READ  •  LISTEN  •  CHAT STORIES':fontcolor=white:fontsize=27:x=265:y=170,drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansHebrew-Bold.ttf:textfile=build/genre.txt:fontcolor=0xffff1f3b:fontsize=45:borderw=2:bordercolor=black@0.8:x=70:y=350,drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansHebrew-Bold.ttf:textfile=build/title.txt:fontcolor=white:fontsize=126:borderw=5:bordercolor=black@0.95:shadowx=5:shadowy=7:shadowcolor=black@0.8:x=70:y=430,drawbox=x=60:y=635:w=880:h=185:color=black@0.48:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansHebrew-Bold.ttf:textfile=build/promise.txt:fontcolor=white:fontsize=50:line_spacing=18:x=95:y=675,drawbox=x=70:y=870:w=475:h=225:color=0x101721@0.92:t=fill,drawbox=x=70:y=870:w=475:h=225:color=white@0.25:t=3,drawbox=x=105:y=940:w=72:h=72:color=0xffff1f3b@0.98:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='▶':fontcolor=white:fontsize=42:x=122:y=953,drawbox=x=215:y=958:w=9:h=38:color=0xffff1f3b:t=fill,drawbox=x=239:y=935:w=9:h=84:color=white:t=fill,drawbox=x=263:y=950:w=9:h=54:color=0xffff1f3b:t=fill,drawbox=x=287:y=925:w=9:h=104:color=white:t=fill,drawbox=x=311:y=945:w=9:h=64:color=0xffff1f3b:t=fill,drawbox=x=335:y=935:w=9:h=84:color=white:t=fill,drawbox=x=359:y=958:w=9:h=38:color=0xffff1f3b:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:text='0\:37':fontcolor=white@0.85:fontsize=31:x=450:y=964,drawbox=x=590:y=875:w=420:h=102:color=0x11151d@0.92:t=fill,drawbox=x=625:y=995:w=360:h=102:color=0x11151d@0.92:t=fill,drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf:textfile=build/message1.txt:fontcolor=white:fontsize=31:line_spacing=7:x=620:y=895,drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf:textfile=build/message2.txt:fontcolor=white:fontsize=31:line_spacing=7:x=655:y=1015,drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansHebrew-Bold.ttf:textfile=build/details.txt:fontcolor=0xffffc83d:fontsize=48:borderw=2:bordercolor=black@0.8:x=80:y=1190,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='CHAT   |   AUDIO':fontcolor=white:fontsize=34:x=690:y=1198,drawbox=x=125:y=1510:w=830:h=150:color=0xffd90920@0.97:t=fill,drawbox=x=125:y=1510:w=830:h=150:color=0xffff5161:t=4,drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansHebrew-Bold.ttf:textfile=build/cta.txt:fontcolor=white:fontsize=48:borderw=2:bordercolor=black@0.4:x=(w-text_w)/2:y=1558,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='@GetNextEpisodeBot':fontcolor=0xffff1f3b:fontsize=48:borderw=2:bordercolor=black@0.8:x=(w-text_w)/2:y=1705,format=rgba[v]" \
             -map "[v]" -frames:v 1 build/story-cover.png
 
           ffmpeg -y -loop 1 -i build/story-cover.png -i build/voice.mp3 -t 35 \
