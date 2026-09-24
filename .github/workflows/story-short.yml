@@ -37,8 +37,19 @@ jobs:
           curl -fsSL "$(jq -r .cover build/manifest.json)" -o build/cover.png
           curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
           jq -r '.teaser' build/manifest.json > build/caption.txt
+          python3 - <<'PY'
+          import json, re
+          t=json.load(open('build/manifest.json',encoding='utf-8')).get('teaser','')
+          words=re.findall(r'\S+',t)
+          dur=35.0/max(1,len(words)); ass=['[Script Info]','ScriptType: v4.00+','PlayResX: 1080','PlayResY: 1920','[V4+ Styles]','Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Alignment,MarginL,MarginR,MarginV','Style: Karaoke,DejaVu Sans,82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H99000000,1,5,60,60,420','[Events]','Format: Layer,Start,End,Style,Text']
+          def ts(x): return f'{int(x//3600)}:{int(x%3600//60):02d}:{x%60:05.2f}'
+          for i,w in enumerate(words):
+              a=i*dur; b=(i+1)*dur
+              ass.append(f'Dialogue: 0,{ts(a)},{ts(b)},Karaoke,{w}')
+          open('build/caption.ass','w',encoding='utf-8').write('\\n'.join(ass))
+          PY
           ffmpeg -y -loop 1 -i build/cover.png -i build/voice.mp3 -t 35 \
-            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:textfile=build/caption.txt:fontcolor=white:fontsize=64:line_spacing=12:fix_bounds=true:x=(w-text_w)/2:y=h-430:box=1:boxcolor=black@0.72:boxborderw=28,format=yuv420p" \
+            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,ass=build/caption.ass,format=yuv420p" \
             -c:v libx264 -c:a aac -shortest build/story-short.mp4
 
       - name: Upload to YouTube
