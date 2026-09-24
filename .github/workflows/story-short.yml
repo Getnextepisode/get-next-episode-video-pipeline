@@ -1,5 +1,5 @@
 name: Generate and publish story short
-
+ 
 on:
   workflow_dispatch:
     inputs:
