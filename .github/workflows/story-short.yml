@@ -56,9 +56,9 @@ jobs:
           pivot=max(1,len(words)//2)
           msg1=' '.join(words[:pivot])
           msg2=' '.join(words[pivot:])
-          open('build/message1.txt','w',encoding='utf-8').write('\\n'.join(textwrap.wrap(msg1,18)[:2]))
-          open('build/message2.txt','w',encoding='utf-8').write('\\n'.join(textwrap.wrap(msg2,18)[:2]))
-          open('build/promise.txt','w',encoding='utf-8').write("סיפורים שנקראים כמו צ'אט.\\nנשמעים כמו סדרה.")
+          open('build/message1.txt','w',encoding='utf-8').write('\n'.join(textwrap.wrap(msg1,18)[:2]))
+          open('build/message2.txt','w',encoding='utf-8').write('\n'.join(textwrap.wrap(msg2,18)[:2]))
+          open('build/promise.txt','w',encoding='utf-8').write("סיפורים שנקראים כמו צ'אט.\nנשמעים כמו סדרה.")
           open('build/cta.txt','w',encoding='utf-8').write("לקרוא או להאזין לפרק הראשון")
           PY
           ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -i build/logo.png -f lavfi -i sine=frequency=440:duration=2 \
