@@ -36,7 +36,13 @@ jobs:
           curl -fsSL -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/video-promo?story=${STORY_ID}" -o build/manifest.json
           curl -fsSL "$(jq -r .cover build/manifest.json)" -o build/cover.png
           curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
-          jq -r '.title' build/manifest.json > build/title.txt
+          python3 - <<'PY'
+import json
+m=json.load(open('build/manifest.json',encoding='utf-8'))
+clean=lambda s: ''.join(ch for ch in str(s) if ord(ch)<0x1f000 or ('\u0590'<=ch<='\u05ff') or ch.isalnum() or ch.isspace() or ch in '.,!?-')
+open('build/title.txt','w',encoding='utf-8').write(clean(m.get('title','Get Next Episode')))
+open('build/tagline.txt','w',encoding='utf-8').write(clean(m.get('teaser','')))
+PY
           jq -r '.teaser' build/manifest.json > build/tagline.txt
           ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -f lavfi -i sine=frequency=440:duration=2 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='GET NEXT':fontcolor=white:fontsize=70:x=(w-text_w)/2:y=780,drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='EPISODE':fontcolor=red:fontsize=70:x=(w-text_w)/2:y=870,format=yuv420p" -c:v libx264 -c:a aac -shortest build/intro.mp4
           ffmpeg -y -loop 1 -i build/cover.png -i build/voice.mp3 -t 35 \
@@ -44,7 +50,7 @@ jobs:
             -c:v libx264 -c:a aac -shortest build/main.mp4
           ffmpeg -y -f lavfi -i color=c=black:s=1080x1920:d=2 -f lavfi -i sine=frequency=330:duration=2 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='READ THE NEXT EPISODE':fontcolor=white:fontsize=54:x=(w-text_w)/2:y=820,format=yuv420p" -c:v libx264 -c:a aac -shortest build/outro.mp4
           printf "file '%s'\\nfile '%s'\\nfile '%s'\\n" "$PWD/build/intro.mp4" "$PWD/build/main.mp4" "$PWD/build/outro.mp4" > build/concat.txt
-          ffmpeg -y -f concat -safe 0 -i build/concat.txt -c copy build/story-short.mp4
+          ffmpeg -y -f concat -safe 0 -i build/concat.txt -c:v libx264 -c:a aac -movflags +faststart build/story-short.mp4
 
       - name: Upload to YouTube
         env:
