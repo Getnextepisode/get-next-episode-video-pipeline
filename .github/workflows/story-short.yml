@@ -38,18 +38,17 @@ jobs:
           curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
           jq -r '.teaser' build/manifest.json > build/caption.txt
           python3 - <<'PY'
-          import json, re
+          import json,re
           t=json.load(open('build/manifest.json',encoding='utf-8')).get('teaser','')
-          words=re.findall(r'\S+',t)
-          dur=35.0/max(1,len(words)); ass=['[Script Info]','ScriptType: v4.00+','PlayResX: 1080','PlayResY: 1920','[V4+ Styles]','Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Alignment,MarginL,MarginR,MarginV','Style: Karaoke,DejaVu Sans,82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H99000000,1,5,60,60,420','[Events]','Format: Layer,Start,End,Style,Text']
-          def ts(x): return f'{int(x//3600)}:{int(x%3600//60):02d}:{x%60:05.2f}'
+          words=re.findall(r'\\S+',t); dur=35.0/max(1,len(words))
+          def ts(x): return f'{int(x//3600):02d}:{int(x%3600//60):02d}:{x%60:06.3f}'.replace('.',',')
+          out=[]
           for i,w in enumerate(words):
-              a=i*dur; b=(i+1)*dur
-              ass.append(f'Dialogue: 0,{ts(a)},{ts(b)},Karaoke,{w}')
-          open('build/caption.ass','w',encoding='utf-8').write('\\n'.join(ass))
+              out += [str(i+1), f'{ts(i*dur)} --> {ts((i+1)*dur)}', w, '']
+          open('build/caption.srt','w',encoding='utf-8').write('\\n'.join(out))
           PY
           ffmpeg -y -loop 1 -i build/cover.png -i build/voice.mp3 -t 35 \
-            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,ass=build/caption.ass,format=yuv420p" \
+            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,subtitles=build/caption.srt:force_style='FontName=DejaVu Sans,FontSize=28,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H99000000,BorderStyle=4,Alignment=5,MarginV=500',format=yuv420p" \
             -c:v libx264 -c:a aac -shortest build/story-short.mp4
 
       - name: Upload to YouTube
