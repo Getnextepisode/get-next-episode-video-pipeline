@@ -47,8 +47,10 @@ jobs:
               out += [str(i+1), f'{ts(i*dur)} --> {ts((i+1)*dur)}', w, '']
           open('build/caption.srt','w',encoding='utf-8').write('\\n'.join(out))
           PY
+          test -s build/caption.srt
+          CAPTION_PATH=$(realpath build/caption.srt)
           ffmpeg -y -loop 1 -i build/cover.png -i build/voice.mp3 -t 35 \
-            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,subtitles=filename='build/caption.srt':force_style='FontName=DejaVu Sans,FontSize=28,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H99000000,BorderStyle=4,Alignment=5,MarginV=500',format=yuv420p" \
+            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0005,1.12)':d=1050:s=1080x1920,subtitles=${CAPTION_PATH}:force_style='FontName=DejaVu Sans,FontSize=28,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BackColour=&H99000000,BorderStyle=4,Alignment=5,MarginV=500',format=yuv420p" \
             -c:v libx264 -c:a aac -shortest build/story-short.mp4
 
       - name: Upload to YouTube
