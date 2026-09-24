@@ -55,7 +55,8 @@ jobs:
           pivot=max(1,len(words)//2)
           msg1=' '.join(words[:pivot])
           msg2=' '.join(words[pivot:])
-          open('build/title.txt','w',encoding='utf-8').write(title)
+          title_lines=textwrap.wrap(title,18)[:2]
+          open('build/title.txt','w',encoding='utf-8').write('\n'.join(title_lines))
           open('build/genre.txt','w',encoding='utf-8').write(genre)
           open('build/promise.txt','w',encoding='utf-8').write("סיפורים שנקראים כמו צ'אט.\nנשמעים כמו סדרה.")
           open('build/message1.txt','w',encoding='utf-8').write('\n'.join(textwrap.wrap(msg1,18)[:2]))
