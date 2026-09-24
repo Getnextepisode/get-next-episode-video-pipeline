@@ -1,0 +1,6 @@
+{
+  "name": "get-next-episode-stats",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-24",
+  "d1_databases": [{ "binding": "DB", "database_name": "get-next-episode-db", "database_id": "3535af42-b395-432f-bf79-4eab17b2f923" }]
+}
