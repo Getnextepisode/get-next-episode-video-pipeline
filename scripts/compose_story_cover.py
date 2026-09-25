@@ -2,6 +2,7 @@
 import json, re, sys, math
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps, features
+from fontTools.ttLib import TTFont
 
 if not features.check_feature("raqm"):
     raise RuntimeError("Pillow requires RAQM for correct Hebrew rendering")
@@ -15,11 +16,15 @@ for y in range(1920):
 im=Image.alpha_composite(im,shade)
 d=ImageDraw.Draw(im)
 root=Path("/usr/share/fonts/truetype")
-he=next(root.rglob("NotoSansHebrew-Bold.ttf"))
+he=next(root.rglob("DejaVuSans-Bold.ttf"))
 latin=next(root.rglob("DejaVuSans-Bold.ttf"))
 def clean(s):
     return re.sub(r"[^\w\s\u0590-\u05ff.,!?׳’'־:—-]","",str(s)).strip()
+glyphs=set(TTFont(str(he)).getBestCmap())
 def text(s,box,size=50,color="white",hebrew=True):
+    missing=sorted({ord(ch) for ch in s if not ch.isspace() and ord(ch) not in glyphs})
+    if missing:
+        raise ValueError("Unsupported cover characters: "+", ".join(f"U+{cp:04X}" for cp in missing))
     x,y,w,h=box
     path=he if hebrew else latin
     direction="rtl" if hebrew else "ltr"
