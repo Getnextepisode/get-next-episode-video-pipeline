@@ -82,7 +82,18 @@ jobs:
           printf "file '%s'\\nfile '%s'\\nfile '%s'\\n" "$PWD/build/intro.mp4" "$PWD/build/main.mp4" "$PWD/build/outro.mp4" > build/concat.txt
           ffmpeg -y -f concat -safe 0 -i build/concat.txt -c:v libx264 -c:a aac -ar 48000 -ac 2 -movflags +faststart build/story-short.mp4
 
+
+      - name: Save rendered video for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: story-short-${{ inputs.story_id || 'tenants-only' }}
+          path: |
+            build/story-short.mp4
+            build/story-cover.png
+          retention-days: 7
+
       - name: Upload to YouTube
+        continue-on-error: true
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
