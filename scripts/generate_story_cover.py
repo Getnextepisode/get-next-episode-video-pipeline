@@ -56,7 +56,7 @@ payload = json.dumps({
     "model": "gpt-image-1",
     "size": "1024x1536",
     "quality": "high",
-    "response_format": "b64_json",
+    "output_format": "png",
     "prompt": prompt,
 }).encode("utf-8")
 request = urllib.request.Request(
