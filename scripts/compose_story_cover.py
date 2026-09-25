@@ -2,7 +2,6 @@
 import json, re, sys, math
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps, features
-from fontTools.ttLib import TTFont
 
 if not features.check_feature("raqm"):
     raise RuntimeError("Pillow requires RAQM for correct Hebrew rendering")
@@ -20,9 +19,14 @@ he=next(root.rglob("DejaVuSans-Bold.ttf"))
 latin=next(root.rglob("DejaVuSans-Bold.ttf"))
 def clean(s):
     return re.sub(r"[^\w\s\u0590-\u05ff.,!?׳’'־:—-]","",str(s)).strip()
-glyphs=set(TTFont(str(he)).getBestCmap())
+# Compare rendered glyph masks with the font's missing-glyph box.
+probe=ImageFont.truetype(str(he),48)
+def glyph_signature(ch):
+    mask=probe.getmask(ch)
+    return mask.size, bytes(mask)
+missing_glyph=glyph_signature(chr(0x10FFFF))
 def text(s,box,size=50,color="white",hebrew=True):
-    missing=sorted({ord(ch) for ch in s if not ch.isspace() and ord(ch) not in glyphs})
+    missing=sorted({ord(ch) for ch in s if not ch.isspace() and glyph_signature(ch)==missing_glyph})
     if missing:
         raise ValueError("Unsupported cover characters: "+", ".join(f"U+{cp:04X}" for cp in missing))
     x,y,w,h=box
