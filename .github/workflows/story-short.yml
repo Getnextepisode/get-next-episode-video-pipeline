@@ -42,8 +42,6 @@ jobs:
           curl -fsSL -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/video-promo?story=${STORY_ID}" -o build/manifest.json
           curl -fsSL "$(jq -r .cover build/manifest.json)" -o build/cover.png
           curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
-          curl -fsSL https://raw.githubusercontent.com/Getnextepisode/get-next-episode-video-pipeline/main/assets/get-next-episode-logo-red.png.b64 -o build/logo.png.b64
-          base64 --decode build/logo.png.b64 > build/logo.png
           if [[ -z "${OPENAI_API_KEY:-}" ]]; then
             echo "::error::OPENAI_API_KEY is missing from GitHub Actions Secrets. Premium cover generation cannot continue."
             exit 1
@@ -56,7 +54,7 @@ jobs:
           curl -fsSL https://saliio.com/brand/audio/01-next-episode-outro.wav -o assets/brand/audio/01-next-episode-outro.wav
           python3 scripts/render_brand_sting.py intro build/intro-frames build/intro.mp4
 
-          python3 scripts/compose_story_cover.py build/manifest.json build/ai-cover.png build/logo.png build/story-cover.png
+          python3 scripts/compose_story_cover.py build/manifest.json build/ai-cover.png assets/brand/saliio-lockup.png build/story-cover.png
 
           ffmpeg -y -loop 1 -i build/story-cover.png -i build/voice.mp3 -t 35 \
             -vf "format=yuv420p" -map 0:v -map 1:a -c:v libx264 -r 25 -c:a aac -ar 48000 -ac 2 -af "aresample=48000,loudnorm=I=-16:TP=-1.5:LRA=11" -shortest build/main.mp4
