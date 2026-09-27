@@ -163,6 +163,21 @@ def metric_value(manifest, *keys):
     return None
 
 
+def load_saliio_lockup(path):
+    """Load the official SALIIO lockup and remove its dark preview backdrop."""
+    logo = Image.open(path).convert("RGBA")
+    pixels = logo.load()
+    for y in range(logo.height):
+        for x in range(logo.width):
+            r, g, b, _ = pixels[x, y]
+            light = max(r, g, b)
+            alpha = max(0, min(255, round((light - 20) * 5.2)))
+            pixels[x, y] = (r, g, b, alpha)
+    visible = logo.getchannel("A").point(lambda value: 255 if value > 12 else 0)
+    bounds = visible.getbbox()
+    return logo.crop(bounds) if bounds else logo
+
+
 def main():
     manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     base = ImageOps.fit(Image.open(sys.argv[2]).convert("RGB"), (W,H), method=Image.Resampling.LANCZOS).convert("RGBA")
@@ -178,13 +193,10 @@ def main():
     global DRAW
     DRAW = ImageDraw.Draw(base)
 
-    logo = Image.open(sys.argv[3]).convert("RGBA")
-    logo.thumbnail((142,142), Image.Resampling.LANCZOS)
-    base.alpha_composite(logo, (68,72))
-    centered_latin("GET NEXT", 405, 91, 54, "#ffffff")
-    centered_latin("EPISODE", 755, 91, 54, "#ff1838")
-    centered_latin("READ  •  LISTEN  •  CHAT STORIES", 574, 157, 25, "#f1f2f5", False)
-    DRAW.line((72,252,1008,252), fill=(255,255,255,70), width=2)
+    logo = load_saliio_lockup(sys.argv[3])
+    logo.thumbnail((920, 264), Image.Resampling.LANCZOS)
+    base.alpha_composite(logo, ((W - logo.width) // 2, 14))
+    DRAW.line((72,292,1008,292), fill=(255,255,255,70), width=2)
 
     title = clean(manifest.get("title") or "סיפור חדש")
     genre = clean(manifest.get("genre") or manifest.get("category") or "סיפור מקורי")
