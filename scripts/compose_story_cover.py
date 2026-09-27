@@ -14,8 +14,8 @@ RAQM = features.check_feature("raqm")
 
 def pick_font(bold=False):
     candidates = [
-        "/usr/share/fonts/truetype/noto/NotoSansHebrew-Bold.ttf" if bold else "/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansHebrew-Bold.ttf" if bold else "/usr/share/fonts/truetype/noto/NotoSansHebrew-Regular.ttf",
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
     ]
     for item in candidates:
