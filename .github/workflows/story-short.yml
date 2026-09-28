@@ -79,7 +79,6 @@ jobs:
 
       - name: Upload to YouTube
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube }}
-        continue-on-error: true
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
