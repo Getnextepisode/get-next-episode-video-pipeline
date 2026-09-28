@@ -252,7 +252,8 @@ def main():
         centered_latin(readers, 495, 1372, 42, "#ffffff")
         draw_fit("קוראים", (550,1367,175,70), 42, 32, "#ffffff")
 
-    gradient_band(base, (92,1512,988,1660), [(83,113,255),(143,78,255),(218,92,211),(255,174,132)], radius=42)\n    DRAW.rounded_rectangle((92,1512,988,1660), radius=42, outline=(201,167,255,255), width=3)
+    gradient_band(base, (92,1512,988,1660), [(83,113,255),(143,78,255),(218,92,211),(255,174,132)], radius=42)
+    DRAW.rounded_rectangle((92,1512,988,1660), radius=42, outline=(201,167,255,255), width=3)
     draw_fit("הפרק הראשון מחכה לך", (130,1545,812,80), 50, 36, "#ffffff")
     DRAW.line([(915,1572),(935,1586),(915,1600)], fill="#ffffff", width=7, joint="curve")
     centered_latin("@GetNextEpisodeBot", 540, 1701, 44, "#c9a7ff")
