@@ -50,8 +50,9 @@ jobs:
           test -s build/ai-cover.png || { echo "::error::AI cover was not created."; exit 1; }
           mkdir -p assets/brand/audio
           curl -fsSL https://saliio.com/brand/saliio-lockup.png -o assets/brand/saliio-lockup.png
-          curl -fsSL https://saliio.com/brand/audio/01-next-episode-intro.wav -o assets/brand/audio/01-next-episode-intro.wav
-          curl -fsSL https://saliio.com/brand/audio/01-next-episode-outro.wav -o assets/brand/audio/01-next-episode-outro.wav
+          python3 scripts/generate_brand_audio.py assets/brand/audio
+          cp assets/brand/audio/brand-intro.wav assets/brand/audio/01-next-episode-intro.wav
+          cp assets/brand/audio/brand-outro.wav assets/brand/audio/01-next-episode-outro.wav
           python3 scripts/render_brand_sting.py intro build/intro-frames build/intro.mp4
 
           python3 scripts/compose_story_cover.py build/manifest.json build/ai-cover.png assets/brand/saliio-lockup.png build/story-cover.png
@@ -121,4 +122,6 @@ jobs:
               media_body=MediaFileUpload('build/story-short.mp4', mimetype='video/mp4', resumable=True),
           ).execute()
           print('Uploaded YouTube video:', result['id'])
+          print('YouTube channel ID:', result['snippet']['channelId'])
+          print('Public video URL: https://youtube.com/shorts/' + result['id'])
           PY
