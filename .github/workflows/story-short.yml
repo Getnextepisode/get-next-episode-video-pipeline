@@ -93,7 +93,7 @@ jobs:
 
           with open('build/manifest.json', encoding='utf-8') as f:
               manifest = json.load(f)
-          title = manifest.get('title', 'GetNextEpisode')
+          title = manifest.get('title', 'SALIIO')
           teaser = manifest.get('teaser', '')
           creds = Credentials(
               token=None,
@@ -107,9 +107,9 @@ jobs:
           body = {
               'snippet': {
                   'title': f'{title} — רק עוד פרק',
-                  'description': f'{teaser}\n\nהמשך הסיפור מחכה ב-GetNextEpisodeBot: https://t.me/GetNextEpisodeBot',
+                  'description': f'{teaser}\n\nהמשך הסיפור מחכה ב-SALIIO: https://t.me/GetNextEpisodeBot',
                   'categoryId': '24',
-                  'tags': ['shorts', 'story', 'GetNextEpisode', 'רק עוד פרק'],
+                  'tags': ['shorts', 'story', 'SALIIO', 'chat stories', 'רק עוד פרק'],
               },
               'status': {
                   'privacyStatus': 'public',
