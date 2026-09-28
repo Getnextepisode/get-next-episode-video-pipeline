@@ -16,6 +16,7 @@ STINGS = {
     "intro": (2.8, "01-next-episode-intro.wav", (0.00, 0.12, 0.48, 0.79)),
     "outro": (2.5, "01-next-episode-outro.wav", (0.00, 0.24, 0.49)),
 }
+BRAND_COLORS = ((83, 113, 255), (143, 78, 255), (218, 92, 211), (255, 174, 132))
 
 
 def smooth(value):
@@ -41,10 +42,29 @@ def make_base():
     base = Image.new("RGB", SIZE, (4, 3, 18))
     glow = Image.new("RGBA", SIZE, (0, 0, 0, 0))
     draw = ImageDraw.Draw(glow)
-    draw.ellipse((100, 560, 980, 1360), fill=(92, 28, 180, 110))
-    draw.ellipse((260, 700, 820, 1220), fill=(250, 25, 90, 58))
+    draw.ellipse((100, 560, 980, 1360), fill=(92, 56, 210, 100))
+    draw.ellipse((260, 700, 820, 1220), fill=(255, 166, 139, 48))
     glow = glow.filter(ImageFilter.GaussianBlur(180))
     return Image.alpha_composite(base.convert("RGBA"), glow)
+
+
+def make_brand_gradient(size):
+    width, height = size
+    row = Image.new("RGB", (width, 1))
+    pixels = row.load()
+    for x in range(width):
+        position = x / max(1, width - 1) * (len(BRAND_COLORS) - 1)
+        index = min(len(BRAND_COLORS) - 2, int(position))
+        fraction = position - index
+        left, right = BRAND_COLORS[index:index + 2]
+        pixels[x, 0] = tuple(round(a + (b - a) * fraction) for a, b in zip(left, right))
+    return row.resize(size, Image.Resampling.BILINEAR).convert("RGBA")
+
+
+def colored_accent(gradient, mask, strength, blur):
+    layer = gradient.copy()
+    layer.putalpha(mask.point(lambda value: round(value * strength)))
+    return layer.filter(ImageFilter.GaussianBlur(blur)) if blur else layer
 
 
 def render_frames(kind: str, folder: Path, preview: Path | None = None):
@@ -52,6 +72,7 @@ def render_frames(kind: str, folder: Path, preview: Path | None = None):
     count = round(duration * FPS)
     logo = build_logo()
     base = make_base()
+    brand_gradient = make_brand_gradient(SIZE)
     folder.mkdir(parents=True, exist_ok=True)
     preview_frame = None
 
@@ -73,16 +94,16 @@ def render_frames(kind: str, folder: Path, preview: Path | None = None):
             if 0 <= elapsed < 0.24:
                 pulse = max(pulse, (1 - elapsed / 0.24) ** 2)
 
-        # The thin red light sweep and the violet halo accent the melody's
+        # A brand-gradient light sweep and violet halo accent the melody's
         # successive notes; the wordmark settles on the strong note at 0.79s.
-        accent = Image.new("RGBA", SIZE, (0, 0, 0, 0))
-        accent_draw = ImageDraw.Draw(accent)
+        accent_mask = Image.new("L", SIZE, 0)
+        accent_draw = ImageDraw.Draw(accent_mask)
         line_y = 1000 + round(90 * math.sin(min(1, t / duration) * math.pi))
         accent_draw.rounded_rectangle(
             (210, line_y, 870, line_y + 5), radius=3,
-            fill=(255, 24, 83, round(105 * pulse * fade)),
+            fill=255,
         )
-        accent = accent.filter(ImageFilter.GaussianBlur(12))
+        accent = colored_accent(brand_gradient, accent_mask, 0.62 * pulse * fade, 12)
         canvas = Image.alpha_composite(canvas, accent)
 
         target_w = round(850 * scale)
@@ -96,14 +117,15 @@ def render_frames(kind: str, folder: Path, preview: Path | None = None):
 
         # A compact pulse at the audio hit reinforces the actual brand colors.
         if pulse > 0.015:
-            glow = Image.new("RGBA", SIZE, (0, 0, 0, 0))
-            gd = ImageDraw.Draw(glow)
+            border_mask = Image.new("L", SIZE, 0)
+            gd = ImageDraw.Draw(border_mask)
             inset = round(110 - pulse * 10)
             gd.rounded_rectangle(
                 (inset, 610, SIZE[0] - inset, 1310), radius=58,
-                outline=(255, 24, 83, round(85 * pulse * fade)), width=3,
+                outline=255, width=4,
             )
-            canvas = Image.alpha_composite(canvas, glow.filter(ImageFilter.GaussianBlur(7)))
+            glow = colored_accent(brand_gradient, border_mask, 0.58 * pulse * fade, 7)
+            canvas = Image.alpha_composite(canvas, glow)
 
         path = folder / f"frame-{frame:04d}.png"
         canvas.convert("RGB").save(path, optimize=True)
