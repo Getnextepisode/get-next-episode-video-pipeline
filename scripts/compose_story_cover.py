@@ -121,6 +121,27 @@ def centered_latin(text, center, top, size, color, bold=True):
     FONT = old
 
 
+def gradient_band(image, box, colors, radius=0):
+    """Paint a horizontal SALIIO gradient inside a rectangular or rounded mask."""
+    x1, y1, x2, y2 = box
+    width, height = x2 - x1, y2 - y1
+    band = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    pixels = band.load()
+    for x in range(width):
+        position = x / max(1, width - 1) * (len(colors) - 1)
+        index = min(len(colors) - 2, int(position))
+        fraction = position - index
+        left, right = colors[index:index + 2]
+        color = tuple(round(a + (b - a) * fraction) for a, b in zip(left, right))
+        for y in range(height):
+            pixels[x, y] = (*color, 255)
+    if radius:
+        mask = Image.new("L", (width, height), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, width - 1, height - 1), radius=radius, fill=255)
+        band.putalpha(mask)
+    image.alpha_composite(band, (x1, y1))
+
+
 def rounded_card(draw, box, radius=34, fill=(8, 12, 19, 215), outline=(255, 255, 255, 50), width=2):
     draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
 
@@ -201,11 +222,11 @@ def main():
     title = clean(manifest.get("title") or "סיפור חדש")
     genre = clean(manifest.get("genre") or manifest.get("category") or "סיפור מקורי")
     teaser = story_teaser(manifest, title)
-    draw_fit(genre, (80,310,920,72), 42, 30, "#ff3049")
+    draw_fit(genre, (80,310,920,72), 42, 30, "#c9a7ff")
     draw_fit(title, (62,394,956,285), 142, 64, "#fffaf4", spacing=1.08)
 
     # A fine red rule anchors the title block without turning copy into subtitles.
-    DRAW.rounded_rectangle((440,694,640,702), radius=4, fill="#ff1838")
+    gradient_band(base, (440,694,640,702), [(83,113,255),(143,78,255),(218,92,211),(255,174,132)], radius=4)
     draw_fit(teaser, (110,740,860,245), 55, 34, "#ffffff", spacing=1.25)
 
     # Clear product promise using a consistent, hand-drawn icon set.
@@ -213,7 +234,7 @@ def main():
     labels = [(250,"קריאה",icon_book),(540,"האזנה",icon_headphones),(830,"צ׳אט",icon_chat)]
     for cx, label, icon in labels:
         icon(DRAW, cx, 1130, 1.15)
-        DRAW.rounded_rectangle((cx-3,1172,cx+3,1182),radius=3,fill="#ff1838")
+        DRAW.rounded_rectangle((cx-3,1172,cx+3,1182),radius=3,fill="#8f4eff")
         draw_fit(label, (cx-108,1194,216,58), 36, 28, "#ffffff")
 
     rating = metric_value(manifest,"rating","averageRating")
@@ -221,7 +242,7 @@ def main():
     if rating and readers:
         icon_star(DRAW,360,1403,22)
         draw_fit(rating + " / 5", (398,1367,180,70), 42, 34, "#ffc84a", rtl=False)
-        DRAW.ellipse((558,1392,572,1406),fill="#ff1838")
+        DRAW.ellipse((558,1392,572,1406),fill="#8f4eff")
         centered_latin(readers, 670, 1372, 42, "#ffffff")
         draw_fit("קוראים", (745,1367,175,70), 42, 32, "#ffffff")
     elif rating:
@@ -231,10 +252,10 @@ def main():
         centered_latin(readers, 495, 1372, 42, "#ffffff")
         draw_fit("קוראים", (550,1367,175,70), 42, 32, "#ffffff")
 
-    rounded_card(DRAW, (92,1512,988,1660), radius=42, fill="#e50924", outline=(255,104,116,255), width=3)
+    gradient_band(base, (92,1512,988,1660), [(83,113,255),(143,78,255),(218,92,211),(255,174,132)], radius=42)\n    DRAW.rounded_rectangle((92,1512,988,1660), radius=42, outline=(201,167,255,255), width=3)
     draw_fit("הפרק הראשון מחכה לך", (130,1545,812,80), 50, 36, "#ffffff")
     DRAW.line([(915,1572),(935,1586),(915,1600)], fill="#ffffff", width=7, joint="curve")
-    centered_latin("@GetNextEpisodeBot", 540, 1701, 44, "#ff3049")
+    centered_latin("@GetNextEpisodeBot", 540, 1701, 44, "#c9a7ff")
     base.convert("RGB").save(sys.argv[4], quality=96)
 
 
