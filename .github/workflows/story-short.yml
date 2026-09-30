@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       story_id:
-        description: Story ID to promote, or next to select from the daily queue
+        description: Story ID to promote, next for the daily story, or all for the remaining catalog
         required: false
         default: next
         type: string
@@ -43,9 +43,34 @@ jobs:
             echo "Skipping the alternate UTC schedule; cron=$schedule_cron, Israel UTC offset=$israel_offset."
           fi
 
-  render-and-publish:
+
+  story-selection:
     needs: schedule-check
+    runs-on: ubuntu-latest
+    outputs:
+      story-ids: ${{ steps.select.outputs.story_ids }}
+    steps:
+      - id: select
+        env:
+          REQUESTED_STORY_ID: ${{ inputs.story_id || 'next' }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+            echo 'story_ids=["next"]' >> "$GITHUB_OUTPUT"
+          elif [[ "$REQUESTED_STORY_ID" == "all" ]]; then
+            echo 'story_ids=["your_wife_wrote_me","the_group_without_mom","who_is_in_the_photo","dads_old_number","apartment_zero","dairim","file_404","last_inheritance","unsent_message","midnight_platform","blue_room","glass_code","night_shift","the_last_key","silent_witness","beneath_the_bridge","borrowed_time","the_seventh_floor","echoes_of_home","false_identity","the_rainy_room","closed_circuit","the_paper_boat","final_call","the_hollow_house","second_chance","the_signal","broken_portrait","the_night_market","no_return_address","half_light","the_empty_train","nine_minutes","the_wind_diary","deep_water","the_missing_note","thirteen_steps","our_summer","mirror_game","the_hidden_station","red_line","the_salt_letter","blackout","the_lantern","one_more_song","the_forgotten_name","cold_case_17","the_orange_door","off_the_record","the_final_guest","glass_heart","the_sleeping_city","little_lies","tide_turns","the_final_page","the_tidal_map","the_wandering_library","the_sky_route","knocks_in_the_wall","the_last_frame"]' >> "$GITHUB_OUTPUT"
+          else
+            printf 'story_ids=["%s"]\n' "$REQUESTED_STORY_ID" >> "$GITHUB_OUTPUT"
+          fi
+
+  render-and-publish:
+    needs: [schedule-check, story-selection]
     if: needs.schedule-check.outputs.should-run == 'true'
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        story_id: ${{ fromJSON(needs.story-selection.outputs.story-ids) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -62,7 +87,7 @@ jobs:
       - name: Build vertical short
         id: build-video
         env:
-          STORY_ID: ${{ inputs.story_id || 'next' }}
+          STORY_ID: ${{ matrix.story_id }}
           APP_URL: https://get-next-episode-bot.byd-karaoke-israel.workers.dev
           VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
