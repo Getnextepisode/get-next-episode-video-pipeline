@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       story_id:
-        description: Story ID to promote (for example tenants-only)
-        required: true
+        description: Story ID to promote, or next to select from the daily queue
+        required: false
+        default: next
         type: string
       publish_to_youtube:
         description: Publish the finished short to YouTube
@@ -13,10 +14,36 @@ on:
         default: true
         type: boolean
   schedule:
-    - cron: '30 18 * * *'
+    # GitHub cron uses UTC. These two times cover Israel daylight and standard time;
+    # the schedule-check job lets only the run that falls after 13:20 local proceed.
+    - cron: '20 10,11 * * *'
 
 jobs:
+  schedule-check:
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.check.outputs.should_run }}
+    steps:
+      - id: check
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" != "schedule" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          israel_hour=$(TZ=Asia/Jerusalem date +'%H')
+          israel_minute=$(TZ=Asia/Jerusalem date +'%M')
+          if [[ "$israel_hour" == "13" && "$israel_minute" -ge 20 ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Starting the daily video at Israel local time $(TZ=Asia/Jerusalem date +'%H:%M %Z')."
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping the alternate UTC schedule; Israel local time is $(TZ=Asia/Jerusalem date +'%H:%M %Z')."
+          fi
+
   render-and-publish:
+    needs: schedule-check
+    if: needs.schedule-check.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,14 +58,42 @@ jobs:
           python3 -m pip install --upgrade Pillow google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
 
       - name: Build vertical short
+        id: build-video
         env:
-          STORY_ID: ${{ inputs.story_id || 'tenants-only' }}
+          STORY_ID: ${{ inputs.story_id || 'next' }}
           APP_URL: https://get-next-episode-bot.byd-karaoke-israel.workers.dev
           VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           mkdir -p build
+
+          if [[ "$STORY_ID" == "next" ]]; then
+            story_queue=(
+              she_fell_asleep the_deleted_message the_second_phone friday_dinner_photo
+              your_wife_wrote_me the_group_without_mom who_is_in_the_photo dads_old_number
+              apartment_zero dairim file_404 last_inheritance unsent_message midnight_platform
+              blue_room glass_code night_shift the_last_key silent_witness beneath_the_bridge
+              borrowed_time the_seventh_floor echoes_of_home false_identity the_rainy_room
+              closed_circuit the_paper_boat final_call the_hollow_house second_chance
+              the_signal broken_portrait the_night_market no_return_address half_light
+              the_empty_train nine_minutes the_wind_diary deep_water the_missing_note
+              thirteen_steps our_summer mirror_game the_hidden_station red_line the_salt_letter
+              blackout the_lantern one_more_song the_forgotten_name cold_case_17
+              the_orange_door off_the_record the_final_guest glass_heart the_sleeping_city
+              little_lies tide_turns the_final_page the_tidal_map the_wandering_library
+              the_sky_route knocks_in_the_wall the_last_frame
+            )
+            israel_date=$(TZ=Asia/Jerusalem date +'%Y-%m-%d')
+            anchor_epoch=$(date -u -d '2026-10-01' +%s)
+            today_epoch=$(date -u -d "$israel_date" +%s)
+            days_since_anchor=$(( (today_epoch - anchor_epoch) / 86400 ))
+            story_index=$(( (days_since_anchor % ${#story_queue[@]} + ${#story_queue[@]}) % ${#story_queue[@]} ))
+            STORY_ID="${story_queue[$story_index]}"
+            echo "Daily queue selected story: $STORY_ID"
+          fi
+
+          echo "story_id=$STORY_ID" >> "$GITHUB_OUTPUT"
           curl -fsSL -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/video-promo?story=${STORY_ID}" -o build/manifest.json
           curl -fsSL "$(jq -r .cover build/manifest.json)" -o build/cover.png
           curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
@@ -71,7 +126,7 @@ jobs:
       - name: Save rendered video for review
         uses: actions/upload-artifact@v4
         with:
-          name: story-short-${{ inputs.story_id || 'tenants-only' }}
+          name: story-short-${{ steps.build-video.outputs.story_id }}
           path: |
             build/story-short.mp4
             build/story-cover.png
