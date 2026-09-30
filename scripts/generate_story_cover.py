@@ -3,6 +3,7 @@ import base64
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -46,12 +47,31 @@ request = urllib.request.Request(
     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
     method="POST",
 )
-try:
-    with urllib.request.urlopen(request, timeout=300) as response:
-        result = json.load(response)
-except urllib.error.HTTPError as error:
-    detail = error.read().decode("utf-8", "replace")
-    print(f"Image generation failed ({error.code}): {detail[:1000]}")
+result = None
+for attempt in range(5):
+    try:
+        with urllib.request.urlopen(request, timeout=300) as response:
+            result = json.load(response)
+        break
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", "replace")
+        if error.code not in (408, 409, 425, 429) and error.code < 500:
+            print(f"Image generation failed ({error.code}): {detail[:1000]}")
+            raise SystemExit(3)
+        if attempt == 4:
+            print(f"Image generation failed after retries ({error.code}): {detail[:1000]}")
+            raise SystemExit(3)
+        print(f"Temporary image service failure ({error.code}); retry {attempt + 1}/4.")
+        time.sleep(2 ** attempt)
+    except (urllib.error.URLError, TimeoutError) as error:
+        if attempt == 4:
+            print(f"Image generation failed after retries: {error}")
+            raise SystemExit(3)
+        print(f"Temporary image service failure; retry {attempt + 1}/4.")
+        time.sleep(2 ** attempt)
+
+if result is None:
+    print("Image generation returned no response.")
     raise SystemExit(3)
 
 encoded = (result.get("data") or [{}])[0].get("b64_json")
