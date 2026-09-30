@@ -132,9 +132,10 @@ jobs:
         id: build-video
         env:
           STORY_ID: ${{ matrix.story_id }}
-          APP_URL: https://get-next-episode-bot.byd-karaoke-israel.workers.dev
+          APP_URL: https://saliio.com
           VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube }}
         run: |
           set -euo pipefail
           mkdir -p build
@@ -148,6 +149,20 @@ jobs:
           fi
 
           echo "story_id=$STORY_ID" >> "$GITHUB_OUTPUT"
+          promotion=$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/promo-status?story=$STORY_ID")
+          if [[ "$(jq -r '.status' <<< "$promotion")" == "published" ]]; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "This story already has a verified YouTube publication; skipping duplicate upload."
+            exit 0
+          fi
+          echo "already_published=false" >> "$GITHUB_OUTPUT"
+          promotion_status=ready
+          if [[ "$SHOULD_PUBLISH" == "true" ]]; then promotion_status=queued; fi
+          curl --fail --silent --show-error --retry 4 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" -H 'Content-Type: application/json' \
+            -d "{\"storyId\":\"$STORY_ID\",\"status\":\"$promotion_status\"}" \
+            "$APP_URL/api/promo-status"
           curl -fsSL -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/video-promo?story=${STORY_ID}" -o build/manifest.json
           curl -fsSL "$(jq -r .cover build/manifest.json)" -o build/cover.png
           curl -fsSL "$(jq -r .audio build/manifest.json)" -o build/voice.mp3
@@ -178,6 +193,7 @@ jobs:
 
 
       - name: Save rendered video for review
+        if: steps.build-video.outputs.already_published != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: story-short-${{ steps.build-video.outputs.story_id }}
@@ -187,7 +203,8 @@ jobs:
           retention-days: 7
 
       - name: Upload to YouTube
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube }}
+        id: upload-youtube
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube) && steps.build-video.outputs.already_published != 'true' }}
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
@@ -204,6 +221,8 @@ jobs:
               manifest = json.load(f)
           title = manifest.get('title', 'SALIIO')
           teaser = manifest.get('teaser', '')
+          story_id = manifest.get('story', '')
+          story_url = f'https://saliio.com/he/stories/{story_id}?utm_source=youtube&utm_medium=shorts&utm_campaign={story_id}'
           creds = Credentials(
               token=None,
               refresh_token=os.environ['YOUTUBE_REFRESH_TOKEN'],
@@ -216,7 +235,7 @@ jobs:
           body = {
               'snippet': {
                   'title': f'{title} — רק עוד פרק',
-                  'description': f'{teaser}\n\nהמשך הסיפור מחכה ב-SALIIO: https://t.me/GetNextEpisodeBot',
+                  'description': f'{teaser}\n\nהמשיכו לקרוא את הסיפור ב־SALIIO: {story_url}',
                   'categoryId': '24',
                   'tags': ['shorts', 'story', 'SALIIO', 'chat stories', 'רק עוד פרק'],
               },
@@ -229,7 +248,38 @@ jobs:
               part='snippet,status', body=body,
               media_body=MediaFileUpload('build/story-short.mp4', mimetype='video/mp4', resumable=True),
           ).execute()
+          with open('build/youtube-upload.json', 'w', encoding='utf-8') as f:
+              json.dump({'videoId': result['id'], 'channelId': result['snippet']['channelId']}, f)
           print('Uploaded YouTube video:', result['id'])
           print('YouTube channel ID:', result['snippet']['channelId'])
           print('Public video URL: https://youtube.com/shorts/' + result['id'])
           PY
+
+      - name: Record promotion result
+        if: always() && steps.build-video.outputs.story_id != ''
+        env:
+          APP_URL: https://saliio.com
+          VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
+          STORY_ID: ${{ steps.build-video.outputs.story_id }}
+          BUILD_OUTCOME: ${{ steps.build-video.outcome }}
+          UPLOAD_OUTCOME: ${{ steps.upload-youtube.outcome }}
+          SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube }}
+          ALREADY_PUBLISHED: ${{ steps.build-video.outputs.already_published }}
+        run: |
+          set -euo pipefail
+          if [[ "$ALREADY_PUBLISHED" == "true" ]]; then
+            echo "Existing publication remains recorded; no duplicate was uploaded."
+            exit 0
+          fi
+          if [[ "$SHOULD_PUBLISH" != "true" ]]; then
+            BODY=$(jq -nc --arg id "$STORY_ID" '{storyId:$id,status:"ready"}')
+          elif [[ "$BUILD_OUTCOME" == "success" && "$UPLOAD_OUTCOME" == "success" && -s build/youtube-upload.json ]]; then
+            VIDEO_ID=$(jq -er '.videoId' build/youtube-upload.json)
+            BODY=$(jq -nc --arg id "$STORY_ID" --arg video "$VIDEO_ID" '{storyId:$id,status:"published",youtubeVideoId:$video}')
+          else
+            REASON="build_${BUILD_OUTCOME}_upload_${UPLOAD_OUTCOME}"
+            BODY=$(jq -nc --arg id "$STORY_ID" --arg error "$REASON" '{storyId:$id,status:"failed",error:$error}')
+          fi
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$APP_URL/api/promo-status"
