@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       story_id:
-        description: Story ID to promote, next for the daily story, or all for the remaining catalog
+        description: Story ID to promote, next for today's story, or all for today's small backlog batch
         required: false
         default: next
         type: string
@@ -18,6 +18,8 @@ on:
     # the check selects exactly one based on Israel's current UTC offset.
     - cron: '20 10 * * *'
     - cron: '20 11 * * *'
+    - cron: '20 12 * * *'
+    - cron: '20 13 * * *'
 
 jobs:
   schedule-check:
@@ -26,23 +28,46 @@ jobs:
       should-run: ${{ steps.check.outputs.should_run }}
     steps:
       - id: check
+        env:
+          REQUESTED_STORY_ID: ${{ inputs.story_id || 'next' }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" != "schedule" ]]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          set -euo pipefail
+          anchor_date='2026-10-02'
+          israel_date=$(TZ=Asia/Jerusalem date +'%Y-%m-%d')
+
+          should_run=false
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+            israel_offset=$(TZ=Asia/Jerusalem date +'%z')
+            schedule_cron='${{ github.event.schedule }}'
+            case "$schedule_cron:$israel_offset" in
+              "20 10 * * *:+0300"|"20 11 * * *:+0200")
+                # Keep the 13:20 daily story/video schedule, starting after the current YouTube limit resets.
+                [[ "$israel_date" > "$anchor_date" || "$israel_date" == "$anchor_date" ]] && should_run=true
+                ;;
+              "20 12 * * *:+0300"|"20 13 * * *:+0200")
+                # Backlog videos run later in the day, in small groups of eight.
+                if [[ "$israel_date" > "$anchor_date" || "$israel_date" == "$anchor_date" ]]; then
+                  anchor_epoch=$(date -u -d "$anchor_date" +%s)
+                  today_epoch=$(date -u -d "$israel_date" +%s)
+                  day_index=$(( (today_epoch - anchor_epoch) / 86400 ))
+                  (( day_index * 8 < 54 )) && should_run=true
+                fi
+                ;;
+              *) ;;
+            esac
+          elif [[ "$israel_date" > "$anchor_date" || "$israel_date" == "$anchor_date" ]]; then
+            if [[ "$REQUESTED_STORY_ID" == "all" ]]; then
+              anchor_epoch=$(date -u -d "$anchor_date" +%s)
+              today_epoch=$(date -u -d "$israel_date" +%s)
+              day_index=$(( (today_epoch - anchor_epoch) / 86400 ))
+              (( day_index * 8 < 54 )) && should_run=true
+            else
+              should_run=true
+            fi
           fi
 
-          israel_offset=$(TZ=Asia/Jerusalem date +'%z')
-          schedule_cron='${{ github.event.schedule }}'
-          if [[ "$schedule_cron" == "20 10 * * *" && "$israel_offset" == "+0300" ]] || \
-             [[ "$schedule_cron" == "20 11 * * *" && "$israel_offset" == "+0200" ]]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Starting today's story and video for Israel's $(TZ=Asia/Jerusalem date +'%z') time zone."
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping the alternate UTC schedule; cron=$schedule_cron, Israel UTC offset=$israel_offset."
-          fi
-
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+          echo "Israel local date=$israel_date; workflow event=$GITHUB_EVENT_NAME; schedule=${{ github.event.schedule }}; should-run=$should_run."
 
   story-selection:
     needs: schedule-check
@@ -55,13 +80,35 @@ jobs:
           REQUESTED_STORY_ID: ${{ inputs.story_id || 'next' }}
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
-            echo 'story_ids=["next"]' >> "$GITHUB_OUTPUT"
-          elif [[ "$REQUESTED_STORY_ID" == "all" ]]; then
-            echo 'story_ids=["your_wife_wrote_me","the_group_without_mom","who_is_in_the_photo","dads_old_number","apartment_zero","dairim","file_404","last_inheritance","unsent_message","midnight_platform","blue_room","glass_code","night_shift","the_last_key","silent_witness","beneath_the_bridge","borrowed_time","the_seventh_floor","echoes_of_home","false_identity","the_rainy_room","closed_circuit","the_paper_boat","final_call","the_hollow_house","second_chance","the_signal","broken_portrait","the_night_market","no_return_address","half_light","the_empty_train","nine_minutes","the_wind_diary","deep_water","the_missing_note","thirteen_steps","our_summer","mirror_game","the_hidden_station","red_line","the_salt_letter","blackout","the_lantern","one_more_song","the_forgotten_name","cold_case_17","the_orange_door","off_the_record","the_final_guest","glass_heart","the_sleeping_city","little_lies","tide_turns","the_final_page","the_tidal_map","the_wandering_library","the_sky_route","knocks_in_the_wall","the_last_frame"]' >> "$GITHUB_OUTPUT"
+          backlog=( file_404 last_inheritance unsent_message midnight_platform blue_room glass_code night_shift the_last_key silent_witness beneath_the_bridge borrowed_time the_seventh_floor echoes_of_home false_identity the_rainy_room closed_circuit the_paper_boat final_call the_hollow_house second_chance the_signal broken_portrait the_night_market no_return_address half_light the_empty_train nine_minutes the_wind_diary deep_water the_missing_note thirteen_steps our_summer mirror_game the_hidden_station red_line the_salt_letter blackout the_lantern one_more_song the_forgotten_name cold_case_17 the_orange_door off_the_record the_final_guest glass_heart the_sleeping_city little_lies tide_turns the_final_page the_tidal_map the_wandering_library the_sky_route knocks_in_the_wall the_last_frame )
+          anchor_date='2026-10-02'
+          israel_date=$(TZ=Asia/Jerusalem date +'%Y-%m-%d')
+          schedule_cron='${{ github.event.schedule }}'
+
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" && "$schedule_cron" != "20 10 * * *" && "$schedule_cron" != "20 11 * * *" ]]; then
+            mode='backlog'
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$REQUESTED_STORY_ID" == "all" ]]; then
+            mode='backlog'
+          elif [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+            mode='next'
           else
-            printf 'story_ids=["%s"]\n' "$REQUESTED_STORY_ID" >> "$GITHUB_OUTPUT"
+            mode="$REQUESTED_STORY_ID"
           fi
+
+          if [[ "$mode" == "backlog" ]]; then
+            anchor_epoch=$(date -u -d "$anchor_date" +%s)
+            today_epoch=$(date -u -d "$israel_date" +%s)
+            day_index=$(( (today_epoch - anchor_epoch) / 86400 ))
+            start_index=$(( day_index * 8 ))
+            selected=( "${backlog[@]:start_index:8}" )
+            story_ids=$(printf '%s\n' "${selected[@]}" | jq -R . | jq -s -c .)
+            echo "Selected backlog batch $((day_index + 1)) starting at story $((start_index + 1))."
+          elif [[ "$mode" == "next" ]]; then
+            story_ids='["next"]'
+          else
+            story_ids=$(printf '%s\n' "$mode" | jq -R . | jq -s -c .)
+          fi
+          echo "story_ids=$story_ids" >> "$GITHUB_OUTPUT"
 
   render-and-publish:
     needs: [schedule-check, story-selection]
