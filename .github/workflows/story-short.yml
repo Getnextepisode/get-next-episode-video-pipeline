@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       story_id:
-        description: Story ID to promote, next for today's story, or all for today's small backlog batch
+        description: Story ID to promote, or next for today's story; backlog videos publish in scheduled batches
         required: false
         default: next
         type: string
@@ -55,13 +55,10 @@ jobs:
                 ;;
               *) ;;
             esac
-          elif [[ "$israel_date" > "$anchor_date" || "$israel_date" == "$anchor_date" ]]; then
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             if [[ "$REQUESTED_STORY_ID" == "all" ]]; then
-              anchor_epoch=$(date -u -d "$anchor_date" +%s)
-              today_epoch=$(date -u -d "$israel_date" +%s)
-              day_index=$(( (today_epoch - anchor_epoch) / 86400 ))
-              (( day_index * 8 < 54 )) && should_run=true
-            else
+              echo "Backlog runs only on the scheduled daily batches."
+            elif [[ "$israel_date" > "$anchor_date" || "$israel_date" == "$anchor_date" ]]; then
               should_run=true
             fi
           fi
