@@ -20,13 +20,15 @@ def api_version():
 
 def graph_request(method, path, fields=None):
     token = os.environ.get("META_PAGE_ACCESS_TOKEN", "")
-    page_id = os.environ.get("META_PAGE_ID", "")
-    if not token or not page_id:
-        raise ValueError("META_PAGE_ID and META_PAGE_ACCESS_TOKEN are required")
+    if not token:
+        raise ValueError("META_PAGE_ACCESS_TOKEN is required")
     url = f"https://graph.facebook.com/{api_version()}/{path}"
-    body = urllib.parse.urlencode(fields or {}).encode() if fields is not None else None
+    body = None
     headers = {"Authorization": f"Bearer {token}"}
-    if body is not None:
+    if method == "GET" and fields:
+        url += "?" + urllib.parse.urlencode(fields)
+    elif fields is not None:
+        body = urllib.parse.urlencode(fields).encode()
         headers["Content-Type"] = "application/x-www-form-urlencoded"
     request = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
@@ -37,6 +39,28 @@ def graph_request(method, path, fields=None):
         raise RuntimeError(f"Meta API request failed (HTTP {error.code}): {detail}") from None
     except urllib.error.URLError as error:
         raise RuntimeError(f"Meta API request failed: {error.reason}") from None
+
+
+def resolve_page_id():
+    configured = os.environ.get("META_PAGE_ID", "")
+    if configured and configured.lower() not in {"auto", "me"}:
+        return configured
+    # With a Page Access Token, /me is the Page itself. If a User token was
+    # saved instead, look up the accessible Pages and select the SALIIO Page.
+    me = graph_request("GET", "me", {"fields": "id,name"})
+    name = str(me.get("name", ""))
+    if re.fullmatch(r"\\d{5,32}", str(me.get("id", ""))) and "saliio" in name.lower():
+        print(f"Resolved Facebook Page: {name}")
+        return str(me["id"])
+    try:
+        pages = graph_request("GET", "me/accounts", {"fields": "id,name"})
+        for page in pages.get("data", []):
+            if "saliio" in str(page.get("name", "")).lower() and re.fullmatch(r"\\d{5,32}", str(page.get("id", ""))):
+                print(f"Resolved Facebook Page: {page['name']}")
+                return str(page["id"])
+    except RuntimeError:
+        pass
+    raise RuntimeError("Could not identify the SALIIO Facebook Page from this token; confirm it is a Page Access Token for that Page")
 
 
 def safe_slug(value):
@@ -62,7 +86,7 @@ def load_metadata(manifest_path, youtube_path):
 
 
 def publish_reel(video_path, metadata):
-    page_id = urllib.parse.quote(os.environ["META_PAGE_ID"], safe="")
+    page_id = urllib.parse.quote(resolve_page_id(), safe="")
     video_path = Path(video_path)
     size = video_path.stat().st_size
     started = graph_request("POST", f"{page_id}/video_reels", {"upload_phase": "start"})
