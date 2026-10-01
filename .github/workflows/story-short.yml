@@ -63,7 +63,7 @@ jobs:
           elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             if [[ "$REQUESTED_STORY_ID" == "all" ]]; then
               echo "Backlog runs only on the scheduled daily batches."
-            elif [[ "$israel_date" > "$anchor_date" || "$israel_date" == "$anchor_date" ]]; then
+            else
               should_run=true
             fi
           fi
