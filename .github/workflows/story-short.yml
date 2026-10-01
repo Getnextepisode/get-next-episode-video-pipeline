@@ -142,7 +142,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube }}
           PUBLISH_FACEBOOK: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_facebook }}
-          META_PAGE_ID: ${{ vars.META_PAGE_ID || 'auto' }}
+          META_PAGE_ID: auto
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
@@ -313,7 +313,7 @@ jobs:
         env:
           APP_URL: https://saliio.com
           VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
-          META_PAGE_ID: ${{ vars.META_PAGE_ID || 'auto' }}
+          META_PAGE_ID: auto
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           META_GRAPH_API_VERSION: ${{ vars.META_GRAPH_API_VERSION || 'v26.0' }}
           STORY_ID: ${{ steps.build-video.outputs.story_id }}
@@ -335,7 +335,7 @@ jobs:
         env:
           APP_URL: https://saliio.com
           VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
-          META_PAGE_ID: ${{ vars.META_PAGE_ID || 'auto' }}
+          META_PAGE_ID: auto
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           STORY_ID: ${{ steps.build-video.outputs.story_id }}
           SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_facebook }}
@@ -363,7 +363,7 @@ jobs:
         env:
           APP_URL: https://saliio.com
           VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
-          META_PAGE_ID: ${{ vars.META_PAGE_ID || 'auto' }}
+          META_PAGE_ID: auto
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           META_GRAPH_API_VERSION: ${{ vars.META_GRAPH_API_VERSION || 'v26.0' }}
           STORY_ID: ${{ steps.build-video.outputs.story_id }}
@@ -385,7 +385,7 @@ jobs:
         env:
           APP_URL: https://saliio.com
           VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
-          META_PAGE_ID: ${{ vars.META_PAGE_ID || 'auto' }}
+          META_PAGE_ID: auto
           META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
           STORY_ID: ${{ steps.build-video.outputs.story_id }}
           SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_facebook }}
