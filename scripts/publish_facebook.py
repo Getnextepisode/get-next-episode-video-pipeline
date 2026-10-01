@@ -124,7 +124,7 @@ def publish_reel(video_path, metadata):
 
 
 def publish_page_post(metadata):
-    page_id = urllib.parse.quote(os.environ["META_PAGE_ID"], safe="")
+    page_id = urllib.parse.quote(resolve_page_id(), safe="")
     link = metadata["youtube_url"] or metadata["story_url"]
     message = f"{metadata['title']}\n\n{metadata['teaser']}\n\nהמשיכו לקרוא ולגלות מה מחכה לכם בפרק הבא: {metadata['story_url']}"
     result = graph_request("POST", f"{page_id}/feed", {"message": message, "link": link})
