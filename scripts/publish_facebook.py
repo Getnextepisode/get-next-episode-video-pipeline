@@ -49,13 +49,13 @@ def resolve_page_id():
     # saved instead, look up the accessible Pages and select the SALIIO Page.
     me = graph_request("GET", "me", {"fields": "id,name"})
     name = str(me.get("name", ""))
-    if re.fullmatch(r"\\d{5,32}", str(me.get("id", ""))) and "saliio" in name.lower():
+    if re.fullmatch(r"\d{5,32}", str(me.get("id", ""))) and "saliio" in name.lower():
         print(f"Resolved Facebook Page: {name}")
         return str(me["id"])
     try:
         pages = graph_request("GET", "me/accounts", {"fields": "id,name"})
         for page in pages.get("data", []):
-            if "saliio" in str(page.get("name", "")).lower() and re.fullmatch(r"\\d{5,32}", str(page.get("id", ""))):
+            if "saliio" in str(page.get("name", "")).lower() and re.fullmatch(r"\d{5,32}", str(page.get("id", ""))):
                 print(f"Resolved Facebook Page: {page['name']}")
                 return str(page["id"])
     except RuntimeError:
