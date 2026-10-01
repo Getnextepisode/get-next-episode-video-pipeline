@@ -13,6 +13,11 @@ on:
         required: false
         default: true
         type: boolean
+      publish_to_facebook:
+        description: Publish a Reel and a Page post on Facebook
+        required: false
+        default: true
+        type: boolean
   schedule:
     # GitHub cron uses UTC. These two times cover Israel daylight and standard time;
     # the check selects exactly one based on Israel's current UTC offset.
@@ -136,6 +141,9 @@ jobs:
           VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube }}
+          PUBLISH_FACEBOOK: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_facebook }}
+          META_PAGE_ID: ${{ vars.META_PAGE_ID || '61594944391329' }}
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p build
@@ -149,16 +157,35 @@ jobs:
           fi
 
           echo "story_id=$STORY_ID" >> "$GITHUB_OUTPUT"
-          promotion=$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 30 \
-            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/promo-status?story=$STORY_ID")
-          if [[ "$(jq -r '.status' <<< "$promotion")" == "published" ]]; then
-            echo "already_published=true" >> "$GITHUB_OUTPUT"
-            echo "This story already has a verified YouTube publication; skipping duplicate upload."
+          youtube_promotion=$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/promo-status?story=$STORY_ID&platform=youtube")
+          facebook_reel_promotion=$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/promo-status?story=$STORY_ID&platform=facebook_reel")
+          facebook_post_promotion=$(curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" "$APP_URL/api/promo-status?story=$STORY_ID&platform=facebook_post")
+          youtube_status=$(jq -r '.status // "ready"' <<< "$youtube_promotion")
+          facebook_reel_status=$(jq -r '.status // "ready"' <<< "$facebook_reel_promotion")
+          facebook_post_status=$(jq -r '.status // "ready"' <<< "$facebook_post_promotion")
+          echo "youtube_already_published=$([[ "$youtube_status" == published ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "facebook_reel_already_published=$([[ "$facebook_reel_status" == published ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "facebook_post_already_published=$([[ "$facebook_post_status" == published ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          if [[ "$youtube_status" == published ]]; then
+            youtube_id=$(jq -r '.youtube_video_id // empty' <<< "$youtube_promotion")
+            if [[ -n "$youtube_id" ]]; then jq -n --arg videoId "$youtube_id" '{videoId:$videoId}' > build/youtube-upload.json; fi
+          fi
+          facebook_configured=false
+          if [[ -n "$META_PAGE_ID" && -n "$META_PAGE_ACCESS_TOKEN" ]]; then facebook_configured=true; fi
+          all_done=true
+          if [[ "$SHOULD_PUBLISH" == true && "$youtube_status" != published ]]; then all_done=false; fi
+          if [[ "$PUBLISH_FACEBOOK" == true && "$facebook_configured" == true && ( "$facebook_reel_status" != published || "$facebook_post_status" != published ) ]]; then all_done=false; fi
+          if [[ "$all_done" == true && ( "$SHOULD_PUBLISH" == true || ( "$PUBLISH_FACEBOOK" == true && "$facebook_configured" == true ) ) ]]; then
+            echo "skip_build=true" >> "$GITHUB_OUTPUT"
+            echo "All configured platforms already have a recorded publication; skipping duplicate work."
             exit 0
           fi
-          echo "already_published=false" >> "$GITHUB_OUTPUT"
+          echo "skip_build=false" >> "$GITHUB_OUTPUT"
           promotion_status=ready
-          if [[ "$SHOULD_PUBLISH" == "true" ]]; then promotion_status=queued; fi
+          if [[ "$SHOULD_PUBLISH" == "true" && "$youtube_status" != published ]]; then promotion_status=queued; fi
           curl --fail --silent --show-error --retry 4 --retry-all-errors --retry-delay 2 --max-time 30 \
             -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" -H 'Content-Type: application/json' \
             -d "{\"storyId\":\"$STORY_ID\",\"status\":\"$promotion_status\"}" \
@@ -193,7 +220,7 @@ jobs:
 
 
       - name: Save rendered video for review
-        if: steps.build-video.outputs.already_published != 'true'
+        if: steps.build-video.outputs.skip_build != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: story-short-${{ steps.build-video.outputs.story_id }}
@@ -204,7 +231,7 @@ jobs:
 
       - name: Upload to YouTube
         id: upload-youtube
-        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube) && steps.build-video.outputs.already_published != 'true' }}
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube) && steps.build-video.outputs.youtube_already_published != 'true' && steps.build-video.outputs.skip_build != 'true' }}
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
@@ -256,7 +283,7 @@ jobs:
           PY
 
       - name: Record promotion result
-        if: always() && steps.build-video.outputs.story_id != ''
+        if: always() && steps.build-video.outputs.story_id != '' && steps.build-video.outputs.youtube_already_published != 'true' && steps.build-video.outputs.skip_build != 'true'
         env:
           APP_URL: https://saliio.com
           VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
@@ -264,13 +291,9 @@ jobs:
           BUILD_OUTCOME: ${{ steps.build-video.outcome }}
           UPLOAD_OUTCOME: ${{ steps.upload-youtube.outcome }}
           SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_youtube }}
-          ALREADY_PUBLISHED: ${{ steps.build-video.outputs.already_published }}
+          YOUTUBE_ALREADY_PUBLISHED: ${{ steps.build-video.outputs.youtube_already_published }}
         run: |
           set -euo pipefail
-          if [[ "$ALREADY_PUBLISHED" == "true" ]]; then
-            echo "Existing publication remains recorded; no duplicate was uploaded."
-            exit 0
-          fi
           if [[ "$SHOULD_PUBLISH" != "true" ]]; then
             BODY=$(jq -nc --arg id "$STORY_ID" '{storyId:$id,status:"ready"}')
           elif [[ "$BUILD_OUTCOME" == "success" && "$UPLOAD_OUTCOME" == "success" && -s build/youtube-upload.json ]]; then
@@ -279,6 +302,104 @@ jobs:
           else
             REASON="build_${BUILD_OUTCOME}_upload_${UPLOAD_OUTCOME}"
             BODY=$(jq -nc --arg id "$STORY_ID" --arg error "$REASON" '{storyId:$id,status:"failed",error:$error}')
+          fi
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$APP_URL/api/promo-status"
+
+      - name: Publish Facebook Reel
+        id: upload-facebook-reel
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.publish_to_facebook) && steps.build-video.outputs.facebook_reel_already_published != 'true' && steps.build-video.outputs.skip_build != 'true' }}
+        env:
+          APP_URL: https://saliio.com
+          VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
+          META_PAGE_ID: ${{ vars.META_PAGE_ID || '61594944391329' }}
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          META_GRAPH_API_VERSION: ${{ vars.META_GRAPH_API_VERSION || 'v26.0' }}
+          STORY_ID: ${{ steps.build-video.outputs.story_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$META_PAGE_ID" || -z "$META_PAGE_ACCESS_TOKEN" ]]; then
+            echo "::warning::Facebook publishing is not connected yet. Add META_PAGE_ID and META_PAGE_ACCESS_TOKEN to Actions secrets."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          QUEUED=$(jq -nc --arg id "$STORY_ID" '{storyId:$id,platform:"facebook_reel",status:"queued"}')
+          curl --fail --silent --show-error --retry 4 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" -H 'Content-Type: application/json' \
+            -d "$QUEUED" "$APP_URL/api/promo-status"
+          python3 scripts/publish_facebook.py reel --output build/facebook-reel.json
+
+      - name: Record Facebook Reel result
+        if: always() && steps.build-video.outputs.story_id != '' && steps.build-video.outputs.facebook_reel_already_published != 'true' && steps.build-video.outputs.skip_build != 'true'
+        env:
+          APP_URL: https://saliio.com
+          VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
+          META_PAGE_ID: ${{ vars.META_PAGE_ID || '61594944391329' }}
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          STORY_ID: ${{ steps.build-video.outputs.story_id }}
+          SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_facebook }}
+          REEL_OUTCOME: ${{ steps.upload-facebook-reel.outcome }}
+          REEL_SKIPPED: ${{ steps.upload-facebook-reel.outputs.skipped }}
+        run: |
+          set -euo pipefail
+          if [[ "$SHOULD_PUBLISH" != true || -z "$META_PAGE_ID" || -z "$META_PAGE_ACCESS_TOKEN" ]]; then
+            STATUS=ready
+            BODY=$(jq -nc --arg id "$STORY_ID" --arg status "$STATUS" '{storyId:$id,platform:"facebook_reel",status:$status}')
+          elif [[ "$REEL_OUTCOME" == success && -s build/facebook-reel.json ]]; then
+            VIDEO_ID=$(jq -er '.videoId' build/facebook-reel.json)
+            BODY=$(jq -nc --arg id "$STORY_ID" --arg video "$VIDEO_ID" '{storyId:$id,platform:"facebook_reel",status:"published",facebookVideoId:$video}')
+          else
+            REASON="facebook_reel_${REEL_OUTCOME:-unknown}"
+            BODY=$(jq -nc --arg id "$STORY_ID" --arg error "$REASON" '{storyId:$id,platform:"facebook_reel",status:"failed",error:$error}')
+          fi
+          curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" -H 'Content-Type: application/json' \
+            -d "$BODY" "$APP_URL/api/promo-status"
+
+      - name: Publish Facebook Page post
+        id: upload-facebook-post
+        if: always() && steps.build-video.outcome == 'success' && (github.event_name != 'workflow_dispatch' || inputs.publish_to_facebook) && steps.build-video.outputs.facebook_post_already_published != 'true' && steps.build-video.outputs.skip_build != 'true'
+        env:
+          APP_URL: https://saliio.com
+          VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
+          META_PAGE_ID: ${{ vars.META_PAGE_ID || '61594944391329' }}
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          META_GRAPH_API_VERSION: ${{ vars.META_GRAPH_API_VERSION || 'v26.0' }}
+          STORY_ID: ${{ steps.build-video.outputs.story_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$META_PAGE_ID" || -z "$META_PAGE_ACCESS_TOKEN" ]]; then
+            echo "::warning::Facebook publishing is not connected yet. Add META_PAGE_ID and META_PAGE_ACCESS_TOKEN to Actions secrets."
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          QUEUED=$(jq -nc --arg id "$STORY_ID" '{storyId:$id,platform:"facebook_post",status:"queued"}')
+          curl --fail --silent --show-error --retry 4 --retry-all-errors --retry-delay 2 --max-time 30 \
+            -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" -H 'Content-Type: application/json' \
+            -d "$QUEUED" "$APP_URL/api/promo-status"
+          python3 scripts/publish_facebook.py post --output build/facebook-post.json
+
+      - name: Record Facebook Page post result
+        if: always() && steps.build-video.outputs.story_id != '' && steps.build-video.outputs.facebook_post_already_published != 'true' && steps.build-video.outputs.skip_build != 'true'
+        env:
+          APP_URL: https://saliio.com
+          VIDEO_PIPELINE_SECRET: ${{ secrets.VIDEO_PIPELINE_SECRET }}
+          META_PAGE_ID: ${{ vars.META_PAGE_ID || '61594944391329' }}
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          STORY_ID: ${{ steps.build-video.outputs.story_id }}
+          SHOULD_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_to_facebook }}
+          POST_OUTCOME: ${{ steps.upload-facebook-post.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "$SHOULD_PUBLISH" != true || -z "$META_PAGE_ID" || -z "$META_PAGE_ACCESS_TOKEN" ]]; then
+            BODY=$(jq -nc --arg id "$STORY_ID" '{storyId:$id,platform:"facebook_post",status:"ready"}')
+          elif [[ "$POST_OUTCOME" == success && -s build/facebook-post.json ]]; then
+            POST_ID=$(jq -er '.postId' build/facebook-post.json)
+            BODY=$(jq -nc --arg id "$STORY_ID" --arg post "$POST_ID" '{storyId:$id,platform:"facebook_post",status:"published",facebookPostId:$post}')
+          else
+            REASON="facebook_post_${POST_OUTCOME:-unknown}"
+            BODY=$(jq -nc --arg id "$STORY_ID" --arg error "$REASON" '{storyId:$id,platform:"facebook_post",status:"failed",error:$error}')
           fi
           curl --fail --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --max-time 30 \
             -H "X-Video-Pipeline-Key: $VIDEO_PIPELINE_SECRET" -H 'Content-Type: application/json' \
